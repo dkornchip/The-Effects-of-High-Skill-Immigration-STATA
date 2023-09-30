@@ -1,0 +1,145 @@
+clear all 
+cd "/Users/gx/Desktop/ECON 490/Research Paper"
+capture log close  
+log using log2, text replace
+
+use newTab.dta
+*merging dataset with pen world tables
+
+
+*removing oil producing countries from our dataset
+keep if countrycode == "AUS" | countrycode == "AUT" | countrycode == "BEL" | countrycode == "CAN" | countrycode == "CHE" | countrycode == "CHL" | countrycode == "CZE" | countrycode == "DEU" | countrycode == "DNK" | countrycode == "ESP" | countrycode == "EST" | countrycode == "FIN" | countrycode == "FRA" | countrycode == "GRC" | countrycode == "HUN" | countrycode == "IRL" | countrycode == "ISL" | countrycode == "ISR" | countrycode == "ITA" | countrycode == "JPN" | countrycode == "KOR" | countrycode == "LUX" | countrycode == "LVA" | countrycode == "MEX" | countrycode == "NLD" | countrycode == "NOR" | countrycode == "NZL" | countrycode == "POL" | countrycode == "PRT" | countrycode == "SVK" | countrycode == "SVN" | countrycode == "SWE" | countrycode == "TUR" | countrycode == "USA"
+
+*genenrating variables for our regression  
+gen lngdp = ln(rgdpe/pop)
+gen lnsav = ln(csh_i)
+gen lnhc = ln(hc)
+gen mig = sm_pop_netm/pop
+
+*Summary statistics 
+tab mig
+
+*summary  statistics 
+sum en_pop_dnst, d
+return list
+gen densdummy = 0
+replace densdummy = 1 if en_pop_dnst>r(p50)
+
+*accounting fro year and country fixed effects 
+encode countrycode, gen(ccode)
+xtset ccode year, yearly
+
+gen dlngdp= ln(ln(rgdpe/pop)-ln(L1.rgdpe/L1.pop))
+gen lnpopgrow= ln(ln(pop)-ln(L1.pop))
+
+*Regression 1
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc mig i.year i.ccode
+testparm i.year
+testparm i.ccode
+outreg2 using results, word replace 
+outreg2 using results, word  append
+
+*testing for hetroskeasticity 
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc mig i.year, fe
+xttest3
+
+xtserial lngdp lnsav lnhc mig
+
+xtpcse dlngdp L1.lngdp mig lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1)
+xtpcse dlngdp L1.lngdp mig lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 1
+xtpcse dlngdp L1.lngdp mig lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+
+su mig, d
+return list
+gen migW = mig
+replace migW = r(p1) if migW<r(p1) & migW!=.
+replace migW = r(p99) if migW>r(p99) & migW!=.
+
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc migW i.year i.ccode
+testparm i.year
+testparm i.ccode
+
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc migW i.year, fe
+xttest3
+
+xtserial lngdp lnsav lnhc migW
+
+xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1)
+xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 1
+xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+
+gen immiW = ln(migW)
+gen emiW = ln(-migW)
+
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc immiW i.year i.ccode
+testparm i.year
+testparm i.ccode
+
+xtreg dlngdp L1.lngdp lnpopgrow lnsav lnhc immiW i.year, fe
+xttest3
+
+xtserial lngdp lnsav lnhc immiW
+
+xtpcse dlngdp L1.lngdp immiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+
+
+*Table 1*
+*(net migration)*
+eststo: xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1)
+eststo: xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 1
+eststo: xtpcse dlngdp L1.lngdp migW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+esttab est1 est2 est3, star(* .10 ** .05 *** .01) se stats(N r2)
+
+*Table 2
+*(immigration)*
+eststo: xtpcse dlngdp L1.lngdp immiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1)
+eststo: xtpcse dlngdp L1.lngdp immiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 1
+eststo: xtpcse dlngdp L1.lngdp immiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+esttab est4 est5 est6, star(* .10 ** .05 *** .01) se stats(N r2)
+
+*Table 3
+*(emigration)*
+eststo: xtpcse dlngdp L1.lngdp emiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1)
+eststo: xtpcse dlngdp L1.lngdp emiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 1
+eststo: xtpcse dlngdp L1.lngdp emiW lnsav lnhc lnpopgrow i.ccode i.year, het corr(ar1), if densdummy == 0
+esttab est7 est8 est9, star(* .10 ** .05 *** .01) se stats(N r2)
+
+
+
+*Graphs 
+
+*scatter with migrations and gdp growth (using dataset "newTab")*
+twoway (scatter migW lngdp)(lfit migW lngdp), ytitle("Net migration") xtitle("LOG-GDP per capita")title("Net migration by LOG-GDP per capita") name("GA", replace)
+		
+*pop density subset (using dataset "newTab")*
+twoway (scatter migW lngdp if densdummy==1)(lfit migW lngdp if densdummy==1),      ///
+        ytitle("Net migration") xtitle("LOG-GDP per capita")            ///
+        title("high density population") name("G1", replace)
+twoway (scatter migW lngdp if densdummy==0)(lfit migW lngdp if densdummy==0),      ///
+         ytitle("Net migration") xtitle("LOG-GDP per capita")           ///
+        title("low density population") name("G2", replace)
+graph combine G1 G2, cols(2) title("Net migration by LOG-GDP per capita") saving(GB, replace)
+
+*high skilled vs. low skilled in OECD countries(using dataset "data2")*
+gen img = immig/pop
+twoway (scatter img gdp if highskill==1)(lfit img gdp if highskill==1),      ///
+        ytitle("Immigrantion") xtitle("GDP per capita")                       ///
+        aspectratio(1)                                              ///
+        title("High skilled immigrants") name("G3", replace)
+twoway (scatter img gdp if highskill==0)(lfit img gdp if highskill==0),   ///
+        ytitle("Immigrantion") xtitle("GDP per capita")                       ///
+        aspectratio(1)                                              ///
+        title("Low skilled immigrants") name("G4", replace)
+graph combine G3 G4, cols(2) title("Immigrantation by GDP per capita") saving(GC, replace)
+
+*OECD vs. non-OECD(using dataset"newTab")*
+twoway (scatter migW lngdp if countrycode == "AUS" | countrycode == "AUT" | countrycode == "BEL" | countrycode == "CAN" | countrycode == "CHE" | countrycode == "CHL" | countrycode == "CZE" | countrycode == "DEU" | countrycode == "DNK" | countrycode == "ESP" | countrycode == "EST" | countrycode == "FIN" | countrycode == "FRA" | countrycode == "GRC" | countrycode == "HUN" | countrycode == "IRL" | countrycode == "ISL" | countrycode == "ISR" | countrycode == "ITA" | countrycode == "JPN" | countrycode == "KOR" | countrycode == "LUX" | countrycode == "LVA" | countrycode == "MEX" | countrycode == "NLD" | countrycode == "NOR" | countrycode == "NZL" | countrycode == "POL" | countrycode == "PRT" | countrycode == "SVK" | countrycode == "SVN" | countrycode == "SWE" | countrycode == "TUR" | countrycode == "USA")(lfit migW lngdp if countrycode == "AUS" | countrycode == "AUT" | countrycode == "BEL" | countrycode == "CAN" | countrycode == "CHE" | countrycode == "CHL" | countrycode == "CZE" | countrycode == "DEU" | countrycode == "DNK" | countrycode == "ESP" | countrycode == "EST" | countrycode == "FIN" | countrycode == "FRA" | countrycode == "GRC" | countrycode == "HUN" | countrycode == "IRL" | countrycode == "ISL" | countrycode == "ISR" | countrycode == "ITA" | countrycode == "JPN" | countrycode == "KOR" | countrycode == "LUX" | countrycode == "LVA" | countrycode == "MEX" | countrycode == "NLD" | countrycode == "NOR" | countrycode == "NZL" | countrycode == "POL" | countrycode == "PRT" | countrycode == "SVK" | countrycode == "SVN" | countrycode == "SWE" | countrycode == "TUR" | countrycode == "USA"),      ///
+        ytitle("Net migration") xtitle("LOG-GDP per capita")            ///
+        title("OECD countries") name("G5", replace)
+twoway (scatter migW lngdp if countrycode != "AUS" & countrycode != "AUT" & countrycode != "BEL" & countrycode != "CAN" & countrycode != "CHE" & countrycode != "CHL" & countrycode != "CZE" & countrycode != "DEU" & countrycode != "DNK" & countrycode != "ESP" & countrycode != "EST" & countrycode != "FIN" & countrycode != "FRA" & countrycode != "GRC" & countrycode != "HUN" & countrycode != "IRL" & countrycode != "ISL" & countrycode != "ISR" & countrycode != "ITA" & countrycode != "JPN" & countrycode != "KOR" & countrycode != "LUX" & countrycode != "LVA" & countrycode != "MEX" & countrycode != "NLD" & countrycode != "NOR" & countrycode != "NZL" & countrycode != "POL" & countrycode != "PRT" & countrycode != "SVK" & countrycode != "SVN" & countrycode != "SWE" & countrycode != "TUR" & countrycode != "USA")(lfit migW lngdp if countrycode != "AUS" & countrycode != "AUT" & countrycode != "BEL" & countrycode != "CAN" & countrycode != "CHE" & countrycode != "CHL" & countrycode != "CZE" & countrycode != "DEU" & countrycode != "DNK" & countrycode != "ESP" & countrycode != "EST" & countrycode != "FIN" & countrycode != "FRA" & countrycode != "GRC" & countrycode != "HUN" & countrycode != "IRL" & countrycode != "ISL" & countrycode != "ISR" & countrycode != "ITA" & countrycode != "JPN" & countrycode != "KOR" & countrycode != "LUX" & countrycode != "LVA" & countrycode != "MEX" & countrycode != "NLD" & countrycode != "NOR" & countrycode != "NZL" & countrycode != "POL" & countrycode != "PRT" & countrycode != "SVK" & countrycode != "SVN" & countrycode != "SWE" & countrycode != "TUR" & countrycode != "USA"),      ///
+         ytitle("Net migration") xtitle("LOG-GDP per capita")           ///
+        title("non-OECD countries") name("G6", replace)
+graph combine G5 G6, cols(2) title("Net migration by LOG-GDP per capita") saving(GD, replace)
+
+
+capture log close
